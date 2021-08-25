@@ -1,7 +1,10 @@
 //Up & Down desk based on  https://tttapa.github.io/ESP8266/Chap10%20-%20Simple%20Web%20Server.html
 //Added fancy schmancy html
 //Added reset function
-//Next step is to add an alternating value so it knows which position it is in and can prevent a 'down' push when already down.
+//Added height variable so its position is known. Now won't go 'up' if already 'up' and vice versa.
+//Added error checking in Serial.Println()
+//fixed big error in code - can't have two buttons on the same line. At least not in the way I was doing it.
+
 
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
@@ -10,41 +13,56 @@
 #include <ESP8266WebServer.h>
 
 ESP8266WiFiMulti wifiMulti;     // Create an instance of the ESP8266WiFiMulti class, called 'wifiMulti'
-
 ESP8266WebServer server(80);    // Create a webserver object that listens for HTTP request on port 80
 
 const int led = 2;
 const int up = 3;
 const int down = 4;
-
-/*
-I don't see what this does so I've blanked it.
-void handleRoot();              // function prototypes for HTTP handlers
-void handleUp();
-void handleDown();
-void handleNotFound();
-*/
+int height;
 
 void setup(void){
-  digitalWrite(led,HIGH);
-  Serial.begin(115200);         // Start the Serial communication to send messages to the computer
-  delay(10);
-  Serial.println('\n');
-
+  
   pinMode(led, OUTPUT);
   pinMode(up, OUTPUT);
   pinMode(down, OUTPUT);
 
-  wifiMulti.addAP("SSID", "Password");   // add Wi-Fi networks you want to connect to
+  digitalWrite(led, HIGH);
+  
+  //Sets desk to initial standing height
+  digitalWrite(up, HIGH);
+  delay(10000);
+  digitalWrite(up, LOW);
+  digitalWrite(down, HIGH);
+  delay(5000);
+  digitalWrite(down, LOW);
+  height = 1;
+
+  for (int i = 0; i <= 5; i++) {
+    digitalWrite(led, LOW);
+    delay(250);
+    digitalWrite(led, HIGH);
+    delay(50);
+    }
+  
+  Serial.println(height);
+  digitalWrite(led, HIGH);
+  
+  Serial.begin(115200);         // Start the Serial communication to send messages to the computer
+  delay(10);
+  Serial.println('\n');
+
+  wifiMulti.addAP("SSID", "password");   // add Wi-Fi networks you want to connect to
   wifiMulti.addAP("ssid_from_AP_2", "your_password_for_AP_2");
   wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
 
   Serial.println("Connecting ...");
+  
   int i = 0;
   while (wifiMulti.run() != WL_CONNECTED) { // Wait for the Wi-Fi to connect: scan for Wi-Fi networks, and connect to the strongest of the networks above
     delay(250);
     Serial.print('.');
   }
+  
   Serial.println('\n');
   Serial.print("Connected to ");
   Serial.println(WiFi.SSID());              // Tell us what network we're connected to
@@ -72,10 +90,13 @@ void loop(void){
 }
 
 void handleRoot() {                         //  Form action = value to post. input type value = display on button.
-  String webpage;                           //creates a string of HTML code called webpage with the following lines
+  String webpage;     
       webpage += "<!DOCTYPE HTML>\r\n";
       webpage += "<html>\r\n";
       webpage += "<center>";
+      webpage += "<br>";
+      webpage += "<br>";
+      webpage += "<br>";
       webpage += "<header><title>ESP8266 Desk Controll</title><h1>Uppy - Downy Desk</h1></header>";
       webpage += "<head>";    
       webpage += "<meta name='mobile-web-app-capable' content='yes' />";
@@ -83,44 +104,69 @@ void handleRoot() {                         //  Form action = value to post. inp
       webpage += "</head>";
       webpage += "<br>";
       webpage += "<body>";
-      webpage += "<form action=\"/Up\" method=\"POST\"><input type=\"submit\" value=\"Stand Up\">&nbsp;&nbsp;<form action=\"/Down\" method=\"POST\"><input type=\"submit\" value=\"Sit Down\"></form>";
-      webpage +="<br>";
-      webpage +="<br>";
+      webpage += "<form action=\"/Up\" method=\"POST\"><input type=\"submit\" value=\"Stand Up\"></form>";
+      webpage += "<br>";
+      webpage += "<form action=\"/Down\" method=\"POST\"><input type=\"submit\" value=\"Sit Down\"></form>";
+      webpage += "<br>";
+      webpage += "<br>";
+      webpage += "<br>";
+      webpage += "<br>";
       webpage += "<form action=\"/Reset\" method=\"POST\"><input type=\"submit\" value=\"Reset\"></form>";
       webpage += "</body>";
       webpage += "</center>";
-  
-  server.send(200, "text/html", webpage);   //sends the string of HTML code called webpage to browser
+  server.send(200, "text/html", webpage);
 }
 
-void handleUp() {                          // If a POST request is made to URI /Up
+void handleUp() {                           // If a POST request is made to URI /Up
   server.sendHeader("Location","/");        // Add a header to respond with a new location for the browser to go to the home page again
   server.send(303);                         // Send it back to the browser with an HTTP status 303 (See Other) to redirect
-  digitalWrite(led, LOW);
-  digitalWrite(up, HIGH);
-  delay(5000);
-  digitalWrite(up, LOW);
-  digitalWrite(led, HIGH);
+  if(height == 0) {
+    digitalWrite(led, LOW);
+    digitalWrite(up, HIGH);
+    Serial.println("Going Up");
+    delay(5000);
+    digitalWrite(up, LOW);
+    digitalWrite(led, HIGH);
+    height = 1;
+    Serial.println(height);
+    }
+  else{
+    Serial.println("Already Up");
+  }
 }
+
 
 void handleDown() {                         // If a POST request is made to URI /Down
   server.sendHeader("Location","/");        // Add a header to respond with a new location for the browser to go to the home page again
-  server.send(303);                         // Send it back to the browser with an HTTP status 303 (See Other) to redirect  
-  digitalWrite(led, LOW);
-  digitalWrite(down, HIGH);
-  delay(5000);
-  digitalWrite(down, LOW);
-  digitalWrite(led, HIGH);
+  server.send(303);                         // Send it back to the browser with an HTTP status 303 (See Other) to redirect 
+  if(height == 1) {
+    digitalWrite(led, LOW);
+    digitalWrite(down, HIGH);
+    Serial.println("Going Down");
+    delay(5000);
+    digitalWrite(down, LOW);
+    digitalWrite(led, HIGH);
+    height = 0;
+    Serial.println(height);
+    }
+    else{
+      Serial.println("Already Down");
+    }
 }
 
-void handleReset() {                        //to reset the desk to a known position. Goes up as far as it can go and then down to seated height.
+void handleReset() {                        //to reset the desk to a known position. Goes up as far as it can go and then down to standing height.
   server.sendHeader("Location","/");
   server.send(303);
-  digitalWrite(led,LOW);
+  digitalWrite(led, LOW);
   digitalWrite(up, HIGH);
   delay(10000);
   digitalWrite(up, LOW);
-  digitalWrite(led,HIGH);
+  digitalWrite(down,HIGH);
+  delay(5000);
+  digitalWrite(down,LOW);
+  int height = 1;
+  digitalWrite(led, HIGH);
+  Serial.println(height);
 }
 
 void handleNotFound(){
