@@ -4,7 +4,8 @@
 //Added height variable so its position is known. Now won't go 'up' if already 'up' and vice versa.
 //Added error checking in Serial.Println()
 //fixed big error in code - can't have two buttons on the same line. At least not in the way I was doing it.
-
+//added position notification and error page when desk is already in position
+//tidied up position indicator to string
 
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
@@ -16,53 +17,31 @@ ESP8266WiFiMulti wifiMulti;     // Create an instance of the ESP8266WiFiMulti cl
 ESP8266WebServer server(80);    // Create a webserver object that listens for HTTP request on port 80
 
 const int led = 2;
-const int up = 3;
-const int down = 4;
-int height;
+const int up = D6;
+const int down = D7;
+String posit;
 
 void setup(void){
   
   pinMode(led, OUTPUT);
   pinMode(up, OUTPUT);
   pinMode(down, OUTPUT);
-
-  digitalWrite(led, HIGH);
-  
-  //Sets desk to initial standing height
-  digitalWrite(up, HIGH);
-  delay(10000);
-  digitalWrite(up, LOW);
-  digitalWrite(down, HIGH);
-  delay(5000);
-  digitalWrite(down, LOW);
-  height = 1;
-
-  for (int i = 0; i <= 5; i++) {
-    digitalWrite(led, LOW);
-    delay(250);
-    digitalWrite(led, HIGH);
-    delay(50);
-    }
-  
-  Serial.println(height);
   digitalWrite(led, HIGH);
   
   Serial.begin(115200);         // Start the Serial communication to send messages to the computer
   delay(10);
   Serial.println('\n');
 
-  wifiMulti.addAP("SSID", "password");   // add Wi-Fi networks you want to connect to
-  wifiMulti.addAP("ssid_from_AP_2", "your_password_for_AP_2");
+  wifiMulti.addAP("SSID1", "Pass1");   // add Wi-Fi networks you want to connect to
+  wifiMulti.addAP("SSID2", "Pass2");
   wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
 
   Serial.println("Connecting ...");
-  
   int i = 0;
   while (wifiMulti.run() != WL_CONNECTED) { // Wait for the Wi-Fi to connect: scan for Wi-Fi networks, and connect to the strongest of the networks above
     delay(250);
     Serial.print('.');
   }
-  
   Serial.println('\n');
   Serial.print("Connected to ");
   Serial.println(WiFi.SSID());              // Tell us what network we're connected to
@@ -83,6 +62,25 @@ void setup(void){
 
   server.begin();                           // Actually start the server
   Serial.println("HTTP server started");
+
+//Sets desk to initial standing height
+  digitalWrite(up, HIGH);
+  delay(1000);
+  digitalWrite(up, LOW);
+  digitalWrite(down, HIGH);
+  delay(500);
+  digitalWrite(down, LOW);
+  posit = "raised";
+  
+  for (int i = 0; i <= 5; i++) {
+    digitalWrite(led, LOW);
+    delay(500);
+    digitalWrite(led, HIGH);
+    delay(100);
+    }
+
+  Serial.println(posit);
+  digitalWrite(led, HIGH);
 }
 
 void loop(void){
@@ -90,17 +88,18 @@ void loop(void){
 }
 
 void handleRoot() {                         //  Form action = value to post. input type value = display on button.
-  String webpage;     
+  String webpage;
       webpage += "<!DOCTYPE HTML>\r\n";
       webpage += "<html>\r\n";
       webpage += "<center>";
       webpage += "<br>";
       webpage += "<br>";
       webpage += "<br>";
-      webpage += "<header><title>ESP8266 Desk Controll</title><h1>Uppy - Downy Desk</h1></header>";
+      webpage += "<header><title>ESP8266 Desk Control</title><h1>Olle's Standing Desk</h1></header>";
       webpage += "<head>";    
       webpage += "<meta name='mobile-web-app-capable' content='yes' />";
       webpage += "<meta name='viewport' content='width=device-width' />";
+      webpage += "<style>body { font-family: Arial, Helvetica, Sans-Serif; Color: #000000; }\"</style>"; // for reference: "<style>body { background-color: #cccccc; font-family: Arial, Helvetica, Sans-Serif; Color: #000000; }\"</style>";
       webpage += "</head>";
       webpage += "<br>";
       webpage += "<body>";
@@ -109,49 +108,85 @@ void handleRoot() {                         //  Form action = value to post. inp
       webpage += "<form action=\"/Down\" method=\"POST\"><input type=\"submit\" value=\"Sit Down\"></form>";
       webpage += "<br>";
       webpage += "<br>";
+      webpage += "<h4>Desk is currently " + String(posit) + ".</h4>";
       webpage += "<br>";
       webpage += "<br>";
       webpage += "<form action=\"/Reset\" method=\"POST\"><input type=\"submit\" value=\"Reset\"></form>";
       webpage += "</body>";
       webpage += "</center>";
+
   server.send(200, "text/html", webpage);
 }
 
-void handleUp() {                           // If a POST request is made to URI /Up
-  server.sendHeader("Location","/");        // Add a header to respond with a new location for the browser to go to the home page again
-  server.send(303);                         // Send it back to the browser with an HTTP status 303 (See Other) to redirect
-  if(height == 0) {
+void handleUp() {                          // If a POST request is made to URI /Up
+
+  if(posit == "lowered") {
     digitalWrite(led, LOW);
     digitalWrite(up, HIGH);
     Serial.println("Going Up");
     delay(5000);
     digitalWrite(up, LOW);
     digitalWrite(led, HIGH);
-    height = 1;
-    Serial.println(height);
+    posit = "raised";
+    Serial.println(posit);
     }
   else{
     Serial.println("Already Up");
+    String uppage;
+      uppage += "<!DOCTYPE HTML>\r\n";
+      uppage += "<html>\r\n";
+      uppage += "<center>";
+      uppage += "<br>";
+      uppage += "<br>";
+      uppage += "<br>";
+      uppage += "<header><title>ESP8266 Desk Control</title><h1>Desk is too damn high.</h1></header>";
+      uppage += "<head>";    
+      uppage += "<meta name='mobile-web-app-capable' content='yes' />";
+      uppage += "<meta name='viewport' content='width=device-width' />";
+      uppage += "<meta http-equiv=\"refresh\" content=\"0;url=/\">"; //refresh to root
+      uppage += "<style>body { font-family: Arial, Helvetica, Sans-Serif; Color: #000000; }\"</style>";
+      uppage += "</head>";
+      uppage += "</center>";
+    server.send(200, "text/html", uppage);
+    delay(3000);
   }
-}
-
-
-void handleDown() {                         // If a POST request is made to URI /Down
   server.sendHeader("Location","/");        // Add a header to respond with a new location for the browser to go to the home page again
   server.send(303);                         // Send it back to the browser with an HTTP status 303 (See Other) to redirect 
-  if(height == 1) {
+}
+
+void handleDown() {                         // If a POST request is made to URI /Down
+  if(posit == "raised") {
     digitalWrite(led, LOW);
     digitalWrite(down, HIGH);
     Serial.println("Going Down");
     delay(5000);
     digitalWrite(down, LOW);
     digitalWrite(led, HIGH);
-    height = 0;
-    Serial.println(height);
+    posit = "lowered";
+    Serial.println(posit);
     }
     else{
       Serial.println("Already Down");
+      String downpage;
+      downpage += "<!DOCTYPE HTML>\r\n";
+      downpage += "<html>\r\n";
+      downpage += "<center>";
+      downpage += "<br>";
+      downpage += "<br>";
+      downpage += "<br>";
+      downpage += "<header><title>ESP8266 Desk Control</title><h1>Desk is too damn low.</h1></header>";
+      downpage += "<head>";    
+      downpage += "<meta name='mobile-web-app-capable' content='yes' />";
+      downpage += "<meta name='viewport' content='width=device-width' />";
+      downpage += "<meta http-equiv=\"refresh\" content=\"0;url=/\">"; //refresh to root
+      downpage += "<style>body { font-family: Arial, Helvetica, Sans-Serif; Color: #000000; }\"</style>";
+      downpage += "</head>";
+      downpage += "</center>";
+      server.send(200, "text/html", downpage);
+      delay(3000);
     }
+  server.sendHeader("Location","/");        // Add a header to respond with a new location for the browser to go to the home page again
+  server.send(303);// Send it back to the browser with an HTTP status 303 (See Other) to redirect 
 }
 
 void handleReset() {                        //to reset the desk to a known position. Goes up as far as it can go and then down to standing height.
@@ -164,11 +199,11 @@ void handleReset() {                        //to reset the desk to a known posit
   digitalWrite(down,HIGH);
   delay(5000);
   digitalWrite(down,LOW);
-  int height = 1;
+  posit = "raised"; 
   digitalWrite(led, HIGH);
-  Serial.println(height);
+  Serial.println(posit);
 }
 
 void handleNotFound(){
-  server.send(404, "text/plain", "404: Not found"); // Send HTTP status 404 (Not Found) when there's no handler for the URI in the request
+  server.send(404, "text/plain", "Are you sitting at the right desk?"); // Send HTTP status 404 (Not Found) when there's no handler for the URI in the request
 }
