@@ -6,6 +6,8 @@
 //fixed big error in code - can't have two buttons on the same line. At least not in the way I was doing it.
 //added position notification and error page when desk is already in position
 //tidied up position indicator to string
+//Added flashing IP to notify last 2/3 digits of IP address
+//added fix-it function
 
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
@@ -42,12 +44,53 @@ void setup(void){
     delay(250);
     Serial.print('.');
   }
-  Serial.println('\n');
+  Serial.println('\n');                     //I don't know what this does.
   Serial.print("Connected to ");
   Serial.println(WiFi.SSID());              // Tell us what network we're connected to
   Serial.print("IP address:\t");
   Serial.println(WiFi.localIP());           // Send the IP address of the ESP8266 to the computer
+  
+//Display IP address via flashing onboard LED 
+  IPAddress ip = WiFi.localIP();            // save IP address as ip
+  int last3 = ip[3];                        // save last couplet of IP as last3
+  unsigned ip1 = (last3 / 100U) % 10;       // Save last three digits separately
+  unsigned ip2 = (last3 / 10U) % 10;
+  unsigned ip3 = (last3 / 1U) % 10;
+  Serial.println(ip1);  
+  Serial.println(ip2);
+  Serial.println(ip3);
 
+// flash onboard LED the the last numbers of IP address. Repeat it 2 times incase you are a doofus and not paying attention.
+  for (int doofus = 0; doofus < 2; doofus++) {   
+    for (int i = 0; i < ip1; i++) {
+      digitalWrite(led, LOW);
+      delay(500);
+      digitalWrite(led, HIGH);
+      delay(250);
+    }
+    
+    delay(750);
+    
+    for (int i = 0; i < ip2; i++) {
+      digitalWrite(led, LOW);
+      delay(500);
+      digitalWrite(led, HIGH);
+      delay(250);
+    }
+
+    delay(750);
+
+    for (int i = 0; i < ip3; i++) {
+      digitalWrite(led, LOW);
+      delay(500);
+      digitalWrite(led, HIGH);
+      delay(250);
+    }
+  delay(1500);
+  }
+
+//Start server
+  
   if (MDNS.begin("esp8266")) {              // Start the mDNS responder for esp8266.local
     Serial.println("mDNS responder started");
   } else {
@@ -58,6 +101,7 @@ void setup(void){
   server.on("/Up", HTTP_POST, handleUp);
   server.on("/Down", HTTP_POST, handleDown);  
   server.on("/Reset", HTTP_POST, handleReset);
+  server.on("/Fix", HTTP_POST, handleFix);
   server.onNotFound(handleNotFound);        // When a client requests an unknown URI (i.e. something other than "/"), call function "handleNotFound"
 
   server.begin();                           // Actually start the server
@@ -70,17 +114,8 @@ void setup(void){
   digitalWrite(down, HIGH);
   delay(500);
   digitalWrite(down, LOW);
-  posit = "raised";
-  
-  for (int i = 0; i <= 5; i++) {
-    digitalWrite(led, LOW);
-    delay(500);
-    digitalWrite(led, HIGH);
-    delay(100);
-    }
-
+  posit = "raised"; 
   Serial.println(posit);
-  digitalWrite(led, HIGH);
 }
 
 void loop(void){
@@ -110,8 +145,16 @@ void handleRoot() {                         //  Form action = value to post. inp
       webpage += "<br>";
       webpage += "<h4>Desk is currently " + String(posit) + ".</h4>";
       webpage += "<br>";
-      webpage += "<br>";
       webpage += "<form action=\"/Reset\" method=\"POST\"><input type=\"submit\" value=\"Reset\"></form>";
+      webpage += "<br>";
+      webpage += "<br>";
+      webpage += "<br>";
+      webpage += "<br>";
+      webpage += "<br>";
+      webpage += "<br>";
+      webpage += "<br>";
+      webpage += "<br>";
+      webpage += "<form action=\"/Fix\" method=\"POST\"><input type=\"submit\" value=\"Fix it! Fix it! Fix it!\"></form>";
       webpage += "</body>";
       webpage += "</center>";
 
@@ -202,6 +245,53 @@ void handleReset() {                        //to reset the desk to a known posit
   posit = "raised"; 
   digitalWrite(led, HIGH);
   Serial.println(posit);
+}
+
+void handleFix() {                        //to reset the desk if it is stuck. All the way down, down a bit more and then up to standing
+  String timer ="";
+  for (int i = 5; i >= 0; i--){
+      Serial.println("CountDown");
+      Serial.println(i);
+      timer = String(i);  //converts i to a string for the countdown.
+      String countdown;      
+      countdown += "<!DOCTYPE HTML>\r\n";
+      countdown += "<html>\r\n";
+      countdown += "<center>";
+      countdown += "<br>";
+      countdown += "<br>";
+      countdown += "<br>";
+      countdown += "<header><title>ESP8266 Desk Control</title><h1>Clear the Area!</h1></header>";
+      countdown += "<br>";
+      countdown += "<header><title>ESP8266 Desk Control</title><h2>Resetting in: " + String(timer) + "</h2></header>";
+      countdown += "<br>";
+      countdown += "<head>";    
+      countdown += "<meta name='mobile-web-app-capable' content='yes' />";
+      countdown += "<meta name='viewport' content='width=device-width' />";
+      countdown += "<meta http-equiv=\"refresh\" content=\"0;url=/\">"; //refresh to root
+      countdown += "<style>body { font-family: Arial, Helvetica, Sans-Serif; Color: #000000; }\"</style>";
+      countdown += "</head>";
+      countdown += "</center>";
+      server.send(200, "text/html", countdown);
+      delay(1000);
+     
+  }
+  
+  digitalWrite(led, LOW);
+  digitalWrite(down, HIGH);
+  delay(15000);
+  digitalWrite(down, LOW);
+  delay(300);
+  digitalWrite(down,HIGH);
+  delay(3000);
+  digitalWrite(down,LOW);
+  digitalWrite(up,HIGH);
+  delay(5000);
+  digitalWrite(up,LOW);
+  posit = "lowered"; 
+  digitalWrite(led, HIGH);
+  Serial.println(posit);
+  server.sendHeader("Location","/");
+  server.send(303);
 }
 
 void handleNotFound(){
